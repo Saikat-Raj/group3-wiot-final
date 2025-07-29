@@ -50,22 +50,37 @@ bool BluetoothScanner::_isARelevantDevice(BLEAdvertisedDevice device) {
     return false;
 }
 
+// Forward declarations for global functions
+extern void addOrUpdateTrackedDevice(const char* deviceAddress, unsigned long currentTime);
+extern unsigned long getFirstSeenTime(const char* deviceAddress);
+
 void BluetoothScanner::_addDevice(BLEAdvertisedDevice device) {
     String deviceAddress = device.getAddress().toString();
     
     // Get current time (boot time + elapsed seconds)
     unsigned long currentTime = _unixTime + (millis() / 1000);
     
-    // Track first and last seen times for this device
-    if (_firstSeenTime.find(deviceAddress) == _firstSeenTime.end()) {
-        _firstSeenTime[deviceAddress] = currentTime;
+    // Use persistent tracking across boot cycles
+    unsigned long firstSeen = getFirstSeenTime(deviceAddress.c_str());
+    if (firstSeen == 0) {
+        // First time seeing this device
+        addOrUpdateTrackedDevice(deviceAddress.c_str(), currentTime);
+        firstSeen = currentTime;
         DEBUG_LOG("First contact with device: ");
-        DEBUG_LOGN(deviceAddress);
+        DEBUG_LOG(deviceAddress);
+        DEBUG_LOG(" at time: ");
+        DEBUG_LOGN(currentTime);
+    } else {
+        DEBUG_LOG("Existing device: ");
+        DEBUG_LOG(deviceAddress);
+        DEBUG_LOG(" first seen at: ");
+        DEBUG_LOG(firstSeen);
+        DEBUG_LOG(" now at: ");
+        DEBUG_LOGN(currentTime);
     }
-    _lastSeenTime[deviceAddress] = currentTime;
     
     // Calculate contact duration (seconds)
-    unsigned long contactDuration = _lastSeenTime[deviceAddress] - _firstSeenTime[deviceAddress];
+    unsigned long contactDuration = currentTime - firstSeen;
     
     DEBUG_LOG("Contact duration with ");
     DEBUG_LOG(deviceAddress);

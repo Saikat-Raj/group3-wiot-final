@@ -9,6 +9,47 @@
 RTC_DATA_ATTR unsigned long bootCount = 0;
 RTC_DATA_ATTR unsigned long lastUploadDuration = 0;
 
+// Persistent contact tracking (limited to 10 devices for memory efficiency)
+#define MAX_TRACKED_DEVICES 10
+RTC_DATA_ATTR char trackedDevices[MAX_TRACKED_DEVICES][18]; // MAC addresses
+RTC_DATA_ATTR unsigned long firstSeenTimes[MAX_TRACKED_DEVICES];
+RTC_DATA_ATTR int trackedDeviceCount = 0;
+
+// Helper functions for persistent contact tracking
+int findTrackedDevice(const char* deviceAddress) {
+  for (int i = 0; i < trackedDeviceCount; i++) {
+    if (strcmp(trackedDevices[i], deviceAddress) == 0) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+unsigned long getFirstSeenTime(const char* deviceAddress) {
+  int index = findTrackedDevice(deviceAddress);
+  if (index >= 0) {
+    return firstSeenTimes[index];
+  }
+  return 0;
+}
+
+void addOrUpdateTrackedDevice(const char* deviceAddress, unsigned long currentTime) {
+  int index = findTrackedDevice(deviceAddress);
+  if (index >= 0) {
+    // Device already tracked, no need to update first seen time
+    return;
+  }
+  
+  // Add new device if we have space
+  if (trackedDeviceCount < MAX_TRACKED_DEVICES) {
+    strcpy(trackedDevices[trackedDeviceCount], deviceAddress);
+    firstSeenTimes[trackedDeviceCount] = currentTime;
+    trackedDeviceCount++;
+    DEBUG_LOG("Added device to persistent tracking: ");
+    DEBUG_LOGN(deviceAddress);
+  }
+}
+
 void setup() {
   Serial.begin(115200);
   delay(100);
