@@ -152,4 +152,4 @@ server.on('listening', () => {
   console.log(`UDP server listening on ${address.address}:${address.port}`);
 });
 
-server.bind(PORT, LOCAL_IP);
+server.bind(PORT, LOCAL_IP);

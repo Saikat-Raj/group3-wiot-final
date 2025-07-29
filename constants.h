@@ -7,7 +7,7 @@
 #define DEEP_SLEEP_TIME 10
 #define FILE_NAME "/data.csv"
 #define SCAN_TIME 15
-#define RSSI_THRESHOLD -90
+#define RSSI_THRESHOLD -100
 
 #define BLE_DEVICE_NAME "ESP32_ContactTracer"
 #define SERVICE_UUID "12345678-1234-5678-1234-56789abcdef0"

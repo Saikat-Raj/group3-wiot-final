@@ -39,7 +39,7 @@ void BluetoothScanner::_addDevice(BLEAdvertisedDevice device) {
 }
 
 void BluetoothScanner::_processDevice(BLEAdvertisedDevice device) {
-    if (_isARelevantDevice(device)) {
+    if (_isARelevantDevice(device) && device.getRSSI() >= RSSI_THRESHOLD) {
         DEBUG_LOG("Found a relevant device with address: ");
         DEBUG_LOGN(device.getAddress().toString());
         DEBUG_LOG("RSSI: ");
