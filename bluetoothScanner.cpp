@@ -1,48 +1,43 @@
 #include <bluetoothScanner.h>
 
 BluetoothScanner::BluetoothScanner(unsigned long unixTime, unsigned long uploadDuration)
-    : _unixTime(unixTime), _uploadDuration(uploadDuration) {
+    : startTime(unixTime), lastUploadDuration(uploadDuration) {
     randomSeed(micros());
-    _deviceId = _generateRandomDeviceId();
+    deviceId = generateDeviceId();
     DEBUG_LOG("Generated Device ID: ");
-    DEBUG_LOGN(_deviceId);
+    DEBUG_LOGN(deviceId);
 }
 
-String BluetoothScanner::_generateRandomDeviceId() {
-    String deviceId = "ESP32_";
-    for (int i = 0; i < ID_SIZE; i++) {
-        deviceId += String(random(0, 10));
+String BluetoothScanner::generateDeviceId() {
+    String id = "ESP32_";
+    for (int i = 0; i < DEVICE_ID_LENGTH; i++) {
+        id += String(random(0, 10));
     }
-    return deviceId;
+    return id;
 }
 
-void BluetoothScanner::_rotateDeviceId() {
-    _deviceId = _generateRandomDeviceId();
-    DEBUG_LOG("Rotated to new Device ID: ");
-    DEBUG_LOGN(_deviceId);
+void BluetoothScanner::updateDeviceId() {
+    deviceId = generateDeviceId();
+    DEBUG_LOG("Updated Device ID: ");
+    DEBUG_LOGN(deviceId);
     
     // Update BLE advertising with new ID
-    BLEAdvertising *bleAdvertising = BLEDevice::getAdvertising();
-    bleAdvertising->stop();
+    BLEAdvertising *advertising = BLEDevice::getAdvertising();
+    advertising->stop();
     
-    String mfgDataString = _deviceId;
     BLEAdvertisementData adData;
-    adData.setManufacturerData(mfgDataString);
-    bleAdvertising->setAdvertisementData(adData);
+    adData.setManufacturerData(deviceId);
+    advertising->setAdvertisementData(adData);
     
-    bleAdvertising->start();
+    advertising->start();
 }
 
-bool BluetoothScanner::_isARelevantDevice(BLEAdvertisedDevice device) {
-    String mfgData = device.getManufacturerData();
+bool BluetoothScanner::isContactTracingDevice(BLEAdvertisedDevice device) {
+    String manufacturerData = device.getManufacturerData();
 
-    if (mfgData.length() > 0) {
-        // DEBUG_LOG("Checking device with mfg data: ");
-        // DEBUG_LOG(mfgData);
-        // DEBUG_LOG(" against our ID: ");
-        // DEBUG_LOGN(_deviceId);
-        
-        if (mfgData.indexOf("ESP32_") != -1 && mfgData != _deviceId) {
+    if (manufacturerData.length() > 0) {
+        // Check if it's another ESP32 contact tracer (not ourselves)
+        if (manufacturerData.indexOf("ESP32_") != -1 && manufacturerData != deviceId) {
             return true;
         }
     }
@@ -59,12 +54,12 @@ extern bool isExposureEvent(const char* deviceAddress, unsigned long currentTime
 extern int findTrackedDevice(const char* deviceAddress);
 extern unsigned long lastCloseContactTimes[];
 
-void BluetoothScanner::_addDevice(BLEAdvertisedDevice device) {
+void BluetoothScanner::recordDeviceContact(BLEAdvertisedDevice device) {
     String deviceAddress = device.getAddress().toString();
     int rssi = device.getRSSI();
     
-    // Get current time (boot time + elapsed seconds)
-    unsigned long currentTime = _unixTime + (millis() / 1000);
+    // Calculate current time from boot
+    unsigned long currentTime = startTime + (millis() / 1000);
     
     // Use persistent tracking across boot cycles
     unsigned long firstSeen = getFirstSeenTime(deviceAddress.c_str());
@@ -116,17 +111,17 @@ void BluetoothScanner::_addDevice(BLEAdvertisedDevice device) {
         DEBUG_LOGN(" seconds close contact) ***");
     }
     
-    String data = String(currentTime) + "," + deviceAddress + "," + String(rssi) + "," + _deviceId + "," + String(_uploadDuration) + "," + String(contactDuration) + "," + String(closeContactDuration) + "," + exposureStatus;
-    storeData(FILE_NAME, data);
+    String data = String(currentTime) + "," + deviceAddress + "," + String(rssi) + "," + deviceId + "," + String(lastUploadDuration) + "," + String(contactDuration) + "," + String(closeContactDuration) + "," + exposureStatus;
+    storeData(DATA_FILE, data);
 }
 
-void BluetoothScanner::_processDevice(BLEAdvertisedDevice device) {
-    if (_isARelevantDevice(device) && device.getRSSI() >= RSSI_THRESHOLD) {
-        DEBUG_LOG("Found a relevant device with address: ");
+void BluetoothScanner::processScannedDevice(BLEAdvertisedDevice device) {
+    if (isContactTracingDevice(device) && device.getRSSI() >= MIN_RSSI) {
+        DEBUG_LOG("Found contact tracing device: ");
         DEBUG_LOGN(device.getAddress().toString());
         DEBUG_LOG("RSSI: ");
         DEBUG_LOGN(device.getRSSI());
-        _addDevice(device);
+        recordDeviceContact(device);
     }
 }
 
@@ -141,39 +136,38 @@ void BluetoothScanner::initBluetooth() {
     bleCharacteristic->setValue(CHARACTERISTIC_VALUE);
     bleService->start();
 
-    BLEAdvertising *bleAdvertising = BLEDevice::getAdvertising();
+    BLEAdvertising *advertising = BLEDevice::getAdvertising();
 
     // Use generated device ID as identifier
-    String mfgDataString = _deviceId;
     BLEAdvertisementData adData;
-    adData.setManufacturerData(mfgDataString);
-    bleAdvertising->setAdvertisementData(adData);
-    bleAdvertising->addServiceUUID(SERVICE_UUID);
-    bleAdvertising->setScanResponse(true);
-    bleAdvertising->setMinPreferred(0x06);
-    bleAdvertising->setMinPreferred(0x12);
-    bleAdvertising->start();
+    adData.setManufacturerData(deviceId);
+    advertising->setAdvertisementData(adData);
+    advertising->addServiceUUID(SERVICE_UUID);
+    advertising->setScanResponse(true);
+    advertising->setMinPreferred(0x06);
+    advertising->setMinPreferred(0x12);
+    advertising->start();
 }
 
-void BluetoothScanner::performBLEScan() {
-    BLEScan *bleScanner = BLEDevice::getScan();
-    bleScanner->setActiveScan(true);
-    bleScanner->setWindow(99);
+void BluetoothScanner::performScan() {
+    BLEScan *scanner = BLEDevice::getScan();
+    scanner->setActiveScan(true);
+    scanner->setWindow(99);
 
-    BLEScanResults *foundDevices = bleScanner->start(SCAN_TIME, false);
-    int numberOfFoundDevices = foundDevices->getCount();
+    BLEScanResults *results = scanner->start(SCAN_DURATION, false);
+    int deviceCount = results->getCount();
 
     DEBUG_LOG("Devices Found: ");
-    DEBUG_LOGN(numberOfFoundDevices);
-    DEBUG_LOGN("Scan Done!");
+    DEBUG_LOGN(deviceCount);
+    DEBUG_LOGN("Scan Complete!");
 
-    for (int i = 0; i < numberOfFoundDevices; i++) {
-        BLEAdvertisedDevice d = foundDevices->getDevice(i);
-        _processDevice(d);
+    for (int i = 0; i < deviceCount; i++) {
+        BLEAdvertisedDevice device = results->getDevice(i);
+        processScannedDevice(device);
     }
 
-    bleScanner->clearResults();
+    scanner->clearResults();
     
-    // Rotate device ID after each scan for runtime privacy
-    _rotateDeviceId();
+    // Update device ID after each scan for privacy
+    updateDeviceId();
 }

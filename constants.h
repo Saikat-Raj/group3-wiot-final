@@ -2,28 +2,28 @@
 #ifndef CONSTANTS_H
 #define CONSTANTS_H
 
-#define MICRO_SECOND_TO_SECOND 1000000
-#define MILLI_SECOND_TO_SECOND 1000
-#define DEEP_SLEEP_TIME 5
-#define FILE_NAME "/data.csv"
-#define SCAN_TIME 10
-#define RSSI_THRESHOLD -100
+// Time conversions
+#define SECONDS_TO_MICROSECONDS 1000000
+#define SLEEP_TIME_SECONDS 5
 
-// Exposure detection criteria
-#define CLOSE_CONTACT_RSSI -60  // Approximate 1.5m distance
-#define EXPOSURE_DURATION_THRESHOLD 300  // 5 minutes in seconds
-#define MIN_CONTACT_DURATION 60  // Minimum 1 minute for any meaningful contact
+// File storage
+#define DATA_FILE "/data.csv"
 
+// Bluetooth scanning
+#define SCAN_DURATION 10
+#define MIN_RSSI -100
+#define CLOSE_CONTACT_RSSI -60    // ~1.5m distance
+#define EXPOSURE_TIME_THRESHOLD 300  // 5 minutes
+
+// Bluetooth configuration
 #define BLE_DEVICE_NAME "ESP32_ContactTracer"
 #define SERVICE_UUID "12345678-1234-5678-1234-56789abcdef0"
 #define CHARACTERISTIC_UUID "abcdefab-1234-5678-1234-abcdefabcdef"
 #define CHARACTERISTIC_VALUE "Hello"
-#define COMPANY_ID 0x1234 // Just a dummy manufacturer ID
-#define ID_SIZE 8
-#define NTP_SERVER "pool.ntp.org"
 
-// Device ID will be generated randomly each cycle
-
+// Device identification
+#define DEVICE_ID_LENGTH 8
+#define TIME_SERVER "pool.ntp.org"
 
 // Set to 0 in production 
 #define DEBUG_MODE 1
@@ -39,6 +39,3 @@
 #endif
 
 #endif // !CONSTANTS_H
-
-
-

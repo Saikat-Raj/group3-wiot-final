@@ -2,8 +2,6 @@
 
 #define RETRY_COUNTER 3
 #define ACK_TIMEOUT 5000 // 1 second
-#define MICRO_SECOND_TO_SECOND 1000000
-#define DEEP_SLEEP_TIME 15 // Deep Sleep for 15 seconds
 
 WifiDataSender::WifiDataSender(const char* ssid, const char* password, const char* udpAddress, unsigned int udpPort, bool debug)
     : _ssid(ssid),
@@ -19,10 +17,9 @@ void WifiDataSender::_connectToWiFi() {
     DEBUG_LOGN("-- LOG: Connecting to WiFi...");
     WiFi.begin(_ssid, _password);
 
-    unsigned long start = millis();
+    unsigned long timeout = millis() + 10000; // 10 second timeout
 
-    // Retry connecting till we connect or exceed time limit
-    while (WiFi.status() != WL_CONNECTED && millis() - start < 10000) {
+    while (WiFi.status() != WL_CONNECTED && millis() < timeout) {
         delay(100);
         DEBUG_LOG(".");
     }
@@ -32,78 +29,71 @@ void WifiDataSender::_connectToWiFi() {
         return;
     }
 
-    DEBUG_LOGN("\n-- SUCCESS: WiFi Connection Successfull!!");
-    DEBUG_LOG("-- LOG: Device IP Address: ");
+    DEBUG_LOGN("\n-- SUCCESS: WiFi Connected!!");
+    DEBUG_LOG("-- LOG: IP Address: ");
     DEBUG_LOGN(WiFi.localIP());
 
-    // Initialize UDP once WiFi is connected
     _udp.begin(_udpPort);
 }
 
 bool WifiDataSender::_sendDataWithConfirmation(const char* data) {
-    _packetAcknowledged = false;
-    _retryCounter = 0;
-    unsigned long lastAttemptTime;
-
-    while (_retryCounter < RETRY_COUNTER && !_packetAcknowledged) {
-        _retryCounter++;
-        lastAttemptTime = millis();
-
-        // Send UDP Packet
+    for (_retryCounter = 1; _retryCounter <= RETRY_COUNTER; _retryCounter++) {
+        // Send UDP packet
         _udp.beginPacket(_udpAddress, _udpPort);
         _udp.print(data);
         _udp.endPacket();
 
         if (_debug) {
-            DEBUG_LOG("-- LOG: Sent Packet #");
-            DEBUG_LOG(_retryCounter);
-            DEBUG_LOG(": \n");
-            DEBUG_LOGN(data);
+            DEBUG_LOG("-- LOG: Sent packet #");
+            DEBUG_LOGN(_retryCounter);
         }
 
-        // Wait for ACK message from server with timeout
-        while (millis() - lastAttemptTime < ACK_TIMEOUT) {
-            int packetSize = _udp.parsePacket();
-            if (packetSize) {
-                char ackBuffer[4];
-                int len = _udp.read(ackBuffer, sizeof(ackBuffer) - 1);
-                if (len > 0) {
-                    ackBuffer[len] = '\0';
-                    if (strcmp(ackBuffer, "ACK") == 0) {
-                        _packetAcknowledged = true;
-                        DEBUG_LOGN("-- SUCCESS: ACK Received!!");
-                        break;
-                    }
+        // Wait for acknowledgment
+        if (waitForAcknowledgment()) {
+            DEBUG_LOGN("-- SUCCESS: ACK Received!!");
+            return true;
+        }
+        
+        DEBUG_LOGN("-- LOG: ACK timeout, retrying...");
+    }
+
+    DEBUG_LOGN("-- ERROR: Max retries exceeded!!");
+    return false;
+}
+
+bool WifiDataSender::waitForAcknowledgment() {
+    unsigned long timeout = millis() + ACK_TIMEOUT;
+    
+    while (millis() < timeout) {
+        int packetSize = _udp.parsePacket();
+        if (packetSize > 0) {
+            char ackBuffer[4];
+            int len = _udp.read(ackBuffer, sizeof(ackBuffer) - 1);
+            if (len > 0) {
+                ackBuffer[len] = '\0';
+                if (strcmp(ackBuffer, "ACK") == 0) {
+                    return true;
                 }
             }
-            delay(10); // Wait a bit before rechecking
         }
-        if (!_packetAcknowledged) {
-            DEBUG_LOGN("-- LOG: ACK timeout, retrying...");
-        }
+        delay(10);
     }
-
-    if (!_packetAcknowledged) {
-        DEBUG_LOGN("-- ERROR: Max Retries Exceeded!!");
-        return false;
-    } else {
-        return true;
-    }
+    return false;
 }
 
 unsigned long WifiDataSender::getUnixTime() {
-
     if (WiFi.status() != WL_CONNECTED) {
         _connectToWiFi();
     }
 
-    configTime(0, 0, NTP_SERVER);
+    configTime(0, 0, TIME_SERVER);
 
-    time_t now;
     struct tm timeinfo;
     if (!getLocalTime(&timeinfo)) {
-        return(0);
+        return 0;
     }
+    
+    time_t now;
     time(&now);
     return now;
 }
@@ -113,8 +103,5 @@ bool WifiDataSender::uploadData(const String data) {
         _connectToWiFi();
     }
 
-    // This is temporary but in reality the data uploaded should be 
-    // the one that is passed
-    // String data = "This is a message " + String(random(0, 100));
     return _sendDataWithConfirmation(data.c_str());
 }

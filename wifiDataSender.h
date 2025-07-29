@@ -19,6 +19,7 @@ class WifiDataSender {
 
         void _connectToWiFi();
         bool _sendDataWithConfirmation(const char* data);
+        bool waitForAcknowledgment();
 
     public:
         WifiDataSender(
