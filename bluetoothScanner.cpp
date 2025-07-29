@@ -56,6 +56,8 @@ extern unsigned long getFirstSeenTime(const char* deviceAddress);
 extern unsigned long getCloseContactDuration(const char* deviceAddress);
 extern void updateCloseContact(const char* deviceAddress, unsigned long currentTime, int rssi);
 extern bool isExposureEvent(const char* deviceAddress, unsigned long currentTime);
+extern int findTrackedDevice(const char* deviceAddress);
+extern unsigned long lastCloseContactTimes[];
 
 void BluetoothScanner::_addDevice(BLEAdvertisedDevice device) {
     String deviceAddress = device.getAddress().toString();
@@ -81,7 +83,14 @@ void BluetoothScanner::_addDevice(BLEAdvertisedDevice device) {
     
     // Calculate total contact duration and close contact duration
     unsigned long contactDuration = currentTime - firstSeen;
+    
+    // Calculate total close contact duration (including ongoing)
     unsigned long closeContactDuration = getCloseContactDuration(deviceAddress.c_str());
+    // Add ongoing close contact time if device is currently in close contact
+    int index = findTrackedDevice(deviceAddress.c_str());
+    if (index >= 0 && lastCloseContactTimes[index] > 0) {
+        closeContactDuration += (currentTime - lastCloseContactTimes[index]);
+    }
     
     // Evaluate exposure status
     bool isExposure = isExposureEvent(deviceAddress.c_str(), currentTime);
