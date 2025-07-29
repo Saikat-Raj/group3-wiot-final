@@ -9,6 +9,11 @@
 #define SCAN_TIME 15
 #define RSSI_THRESHOLD -100
 
+// Exposure detection criteria
+#define CLOSE_CONTACT_RSSI -60  // Approximate 1.5m distance
+#define EXPOSURE_DURATION_THRESHOLD 300  // 5 minutes in seconds
+#define MIN_CONTACT_DURATION 60  // Minimum 1 minute for any meaningful contact
+
 #define BLE_DEVICE_NAME "ESP32_ContactTracer"
 #define SERVICE_UUID "12345678-1234-5678-1234-56789abcdef0"
 #define CHARACTERISTIC_UUID "abcdefab-1234-5678-1234-abcdefabcdef"

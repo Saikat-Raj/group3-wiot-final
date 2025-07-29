@@ -37,10 +37,10 @@ bool BluetoothScanner::_isARelevantDevice(BLEAdvertisedDevice device) {
     String mfgData = device.getManufacturerData();
 
     if (mfgData.length() > 0) {
-        DEBUG_LOG("Checking device with mfg data: ");
-        DEBUG_LOG(mfgData);
-        DEBUG_LOG(" against our ID: ");
-        DEBUG_LOGN(_deviceId);
+        // DEBUG_LOG("Checking device with mfg data: ");
+        // DEBUG_LOG(mfgData);
+        // DEBUG_LOG(" against our ID: ");
+        // DEBUG_LOGN(_deviceId);
         
         if (mfgData.indexOf("ESP32_") != -1 && mfgData != _deviceId) {
             return true;
@@ -53,9 +53,13 @@ bool BluetoothScanner::_isARelevantDevice(BLEAdvertisedDevice device) {
 // Forward declarations for global functions
 extern void addOrUpdateTrackedDevice(const char* deviceAddress, unsigned long currentTime);
 extern unsigned long getFirstSeenTime(const char* deviceAddress);
+extern unsigned long getCloseContactDuration(const char* deviceAddress);
+extern void updateCloseContact(const char* deviceAddress, unsigned long currentTime, int rssi);
+extern bool isExposureEvent(const char* deviceAddress, unsigned long currentTime);
 
 void BluetoothScanner::_addDevice(BLEAdvertisedDevice device) {
     String deviceAddress = device.getAddress().toString();
+    int rssi = device.getRSSI();
     
     // Get current time (boot time + elapsed seconds)
     unsigned long currentTime = _unixTime + (millis() / 1000);
@@ -70,25 +74,40 @@ void BluetoothScanner::_addDevice(BLEAdvertisedDevice device) {
         DEBUG_LOG(deviceAddress);
         DEBUG_LOG(" at time: ");
         DEBUG_LOGN(currentTime);
-    } else {
-        DEBUG_LOG("Existing device: ");
-        DEBUG_LOG(deviceAddress);
-        DEBUG_LOG(" first seen at: ");
-        DEBUG_LOG(firstSeen);
-        DEBUG_LOG(" now at: ");
-        DEBUG_LOGN(currentTime);
     }
     
-    // Calculate contact duration (seconds)
+    // Update close contact tracking based on RSSI
+    updateCloseContact(deviceAddress.c_str(), currentTime, rssi);
+    
+    // Calculate total contact duration and close contact duration
     unsigned long contactDuration = currentTime - firstSeen;
+    unsigned long closeContactDuration = getCloseContactDuration(deviceAddress.c_str());
     
-    DEBUG_LOG("Contact duration with ");
+    // Evaluate exposure status
+    bool isExposure = isExposureEvent(deviceAddress.c_str(), currentTime);
+    String exposureStatus = isExposure ? "EXPOSURE" : "NORMAL";
+    
+    // Enhanced debug logging
+    DEBUG_LOG("Device: ");
     DEBUG_LOG(deviceAddress);
-    DEBUG_LOG(": ");
+    DEBUG_LOG(" RSSI: ");
+    DEBUG_LOG(rssi);
+    DEBUG_LOG(" Total: ");
     DEBUG_LOG(contactDuration);
-    DEBUG_LOGN(" seconds");
+    DEBUG_LOG("s Close: ");
+    DEBUG_LOG(closeContactDuration);
+    DEBUG_LOG("s Status: ");
+    DEBUG_LOGN(exposureStatus);
     
-    String data = String(currentTime) + "," + deviceAddress + "," + String(device.getRSSI()) + "," + _deviceId + "," + String(_uploadDuration) + "," + String(contactDuration);
+    if (isExposure) {
+        DEBUG_LOG("*** EXPOSURE EVENT DETECTED with ");
+        DEBUG_LOG(deviceAddress);
+        DEBUG_LOG(" (");
+        DEBUG_LOG(closeContactDuration);
+        DEBUG_LOGN(" seconds close contact) ***");
+    }
+    
+    String data = String(currentTime) + "," + deviceAddress + "," + String(rssi) + "," + _deviceId + "," + String(_uploadDuration) + "," + String(contactDuration) + "," + String(closeContactDuration) + "," + exposureStatus;
     storeData(FILE_NAME, data);
 }
 

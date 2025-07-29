@@ -13,6 +13,8 @@ RTC_DATA_ATTR unsigned long lastUploadDuration = 0;
 #define MAX_TRACKED_DEVICES 10
 RTC_DATA_ATTR char trackedDevices[MAX_TRACKED_DEVICES][18]; // MAC addresses
 RTC_DATA_ATTR unsigned long firstSeenTimes[MAX_TRACKED_DEVICES];
+RTC_DATA_ATTR unsigned long closeContactDurations[MAX_TRACKED_DEVICES]; // Cumulative close contact time
+RTC_DATA_ATTR unsigned long lastCloseContactTimes[MAX_TRACKED_DEVICES]; // Last time device was in close contact
 RTC_DATA_ATTR int trackedDeviceCount = 0;
 
 // Helper functions for persistent contact tracking
@@ -44,10 +46,60 @@ void addOrUpdateTrackedDevice(const char* deviceAddress, unsigned long currentTi
   if (trackedDeviceCount < MAX_TRACKED_DEVICES) {
     strcpy(trackedDevices[trackedDeviceCount], deviceAddress);
     firstSeenTimes[trackedDeviceCount] = currentTime;
+    closeContactDurations[trackedDeviceCount] = 0;
+    lastCloseContactTimes[trackedDeviceCount] = 0;
     trackedDeviceCount++;
     DEBUG_LOG("Added device to persistent tracking: ");
     DEBUG_LOGN(deviceAddress);
   }
+}
+
+unsigned long getCloseContactDuration(const char* deviceAddress) {
+  int index = findTrackedDevice(deviceAddress);
+  if (index >= 0) {
+    return closeContactDurations[index];
+  }
+  return 0;
+}
+
+void updateCloseContact(const char* deviceAddress, unsigned long currentTime, int rssi) {
+  int index = findTrackedDevice(deviceAddress);
+  if (index < 0) return;
+  
+  if (rssi >= CLOSE_CONTACT_RSSI) {
+    // Device is in close contact range
+    if (lastCloseContactTimes[index] == 0) {
+      // Start of new close contact period
+      lastCloseContactTimes[index] = currentTime;
+    }
+    // Close contact is ongoing, duration will be calculated when contact ends or in evaluation
+  } else {
+    // Device is no longer in close contact range
+    if (lastCloseContactTimes[index] > 0) {
+      // End of close contact period, add duration
+      unsigned long contactPeriod = currentTime - lastCloseContactTimes[index];
+      closeContactDurations[index] += contactPeriod;
+      lastCloseContactTimes[index] = 0;
+      DEBUG_LOG("Close contact ended. Added ");
+      DEBUG_LOG(contactPeriod);
+      DEBUG_LOG(" seconds to device ");
+      DEBUG_LOGN(deviceAddress);
+    }
+  }
+}
+
+bool isExposureEvent(const char* deviceAddress, unsigned long currentTime) {
+  int index = findTrackedDevice(deviceAddress);
+  if (index < 0) return false;
+  
+  unsigned long totalCloseContact = closeContactDurations[index];
+  
+  // Add current ongoing close contact time if applicable
+  if (lastCloseContactTimes[index] > 0) {
+    totalCloseContact += (currentTime - lastCloseContactTimes[index]);
+  }
+  
+  return totalCloseContact >= EXPOSURE_DURATION_THRESHOLD;
 }
 
 void setup() {
