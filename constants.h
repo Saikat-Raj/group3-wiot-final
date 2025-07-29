@@ -4,9 +4,9 @@
 
 #define MICRO_SECOND_TO_SECOND 1000000
 #define MILLI_SECOND_TO_SECOND 1000
-#define DEEP_SLEEP_TIME 10
+#define DEEP_SLEEP_TIME 5
 #define FILE_NAME "/data.csv"
-#define SCAN_TIME 15
+#define SCAN_TIME 10
 #define RSSI_THRESHOLD -100
 
 // Exposure detection criteria

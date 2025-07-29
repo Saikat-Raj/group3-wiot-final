@@ -12,6 +12,7 @@ void storeData(const char* fileName, const String data) {
         // DONT CHANGE THIS
         // It matches the 45 length that we need
         DEBUG_LOGN("-- LOG: Created the Data File!!");
+        
         file.println("timeStamp,peerId,rssi,deviceId,uploadDuration,contactDuration,closeContactDuration,exposureStatus");
     }
 
