@@ -17,8 +17,9 @@ private:
     String _generateRandomDeviceId();
     const unsigned long _unixTime;
     String _deviceId;
+    unsigned long _uploadDuration;
 public:
-    BluetoothScanner(unsigned long unixTime);
+    BluetoothScanner(unsigned long unixTime, unsigned long uploadDuration = 0);
     void initBluetooth();
     void performBLEScan();
 };

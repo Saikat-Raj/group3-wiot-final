@@ -1,7 +1,7 @@
 #include <bluetoothScanner.h>
 
-BluetoothScanner::BluetoothScanner(unsigned long unixTime)
-    : _unixTime(unixTime) {
+BluetoothScanner::BluetoothScanner(unsigned long unixTime, unsigned long uploadDuration)
+    : _unixTime(unixTime), _uploadDuration(uploadDuration) {
     randomSeed(micros());
     _deviceId = _generateRandomDeviceId();
     DEBUG_LOG("Generated Device ID: ");
@@ -34,7 +34,7 @@ bool BluetoothScanner::_isARelevantDevice(BLEAdvertisedDevice device) {
 }
 
 void BluetoothScanner::_addDevice(BLEAdvertisedDevice device) {
-    String data = String(_unixTime) + "," + device.getAddress().toString() + "," + String(device.getRSSI());
+    String data = String(_unixTime) + "," + device.getAddress().toString() + "," + String(device.getRSSI()) + "," + _deviceId + "," + String(_uploadDuration);
     storeData(FILE_NAME, data);
 }
 

@@ -7,6 +7,7 @@
 #include <utils.h>
 
 RTC_DATA_ATTR unsigned long bootCount = 0;
+RTC_DATA_ATTR unsigned long lastUploadDuration = 0;
 
 void setup() {
   Serial.begin(115200);
@@ -23,14 +24,26 @@ void setup() {
 
   WifiDataSender wifiDataSender = WifiDataSender(SSID, PASSWORD, UDP_ADDRESS, UDP_PORT, true);
   unsigned long unixTime = wifiDataSender.getUnixTime();
-  BluetoothScanner bluetoothScanner = BluetoothScanner(unixTime);
+  BluetoothScanner bluetoothScanner = BluetoothScanner(unixTime, lastUploadDuration);
 
   bluetoothScanner.initBluetooth();
   bluetoothScanner.performBLEScan();
 
   if (bootCount > 0 && bootCount % 5 == 0) {
-    const String data = readData(FILE_NAME);
-    if (wifiDataSender.uploadData(data)) {
+    String data = readData(FILE_NAME);
+    unsigned long uploadStartTime = millis();
+    
+    // Add upload metadata header
+    String uploadInfo = "# Upload Timestamp: " + String(unixTime) + "\n";
+    String dataWithMetadata = uploadInfo + data;
+    
+    if (wifiDataSender.uploadData(dataWithMetadata)) {
+      unsigned long uploadDuration = millis() - uploadStartTime;
+      lastUploadDuration = uploadDuration;
+      DEBUG_LOG("-- LOG: Upload completed in ");
+      DEBUG_LOG(uploadDuration);
+      DEBUG_LOGN(" ms");
+      
       SPIFFS.format();
     }
   }
