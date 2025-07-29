@@ -2,6 +2,7 @@
 
 BluetoothScanner::BluetoothScanner(unsigned long unixTime)
     : _unixTime(unixTime) {
+    randomSeed(micros());
     _deviceId = _generateRandomDeviceId();
     DEBUG_LOG("Generated Device ID: ");
     DEBUG_LOGN(_deviceId);
