@@ -15,6 +15,7 @@ private:
     void _addDevice(BLEAdvertisedDevice device);
     void _processDevice(BLEAdvertisedDevice device);
     String _generateRandomDeviceId();
+    void _rotateDeviceId();
     const unsigned long _unixTime;
     String _deviceId;
     unsigned long _uploadDuration;

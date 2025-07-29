@@ -16,6 +16,23 @@ String BluetoothScanner::_generateRandomDeviceId() {
     return deviceId;
 }
 
+void BluetoothScanner::_rotateDeviceId() {
+    _deviceId = _generateRandomDeviceId();
+    DEBUG_LOG("Rotated to new Device ID: ");
+    DEBUG_LOGN(_deviceId);
+    
+    // Update BLE advertising with new ID
+    BLEAdvertising *bleAdvertising = BLEDevice::getAdvertising();
+    bleAdvertising->stop();
+    
+    String mfgDataString = _deviceId;
+    BLEAdvertisementData adData;
+    adData.setManufacturerData(mfgDataString);
+    bleAdvertising->setAdvertisementData(adData);
+    
+    bleAdvertising->start();
+}
+
 bool BluetoothScanner::_isARelevantDevice(BLEAdvertisedDevice device) {
     String mfgData = device.getManufacturerData();
 
@@ -91,4 +108,7 @@ void BluetoothScanner::performBLEScan() {
     }
 
     bleScanner->clearResults();
+    
+    // Rotate device ID after each scan for runtime privacy
+    _rotateDeviceId();
 }
