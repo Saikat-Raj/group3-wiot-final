@@ -24,6 +24,13 @@ void setup() {
 
   WifiDataSender wifiDataSender = WifiDataSender(SSID, PASSWORD, UDP_ADDRESS, UDP_PORT, true);
   unsigned long unixTime = wifiDataSender.getUnixTime();
+  
+  DEBUG_LOG("-- LOG: Boot count: ");
+  DEBUG_LOG(bootCount);
+  DEBUG_LOG(", Last upload duration: ");
+  DEBUG_LOG(lastUploadDuration);
+  DEBUG_LOGN(" ms");
+  
   BluetoothScanner bluetoothScanner = BluetoothScanner(unixTime, lastUploadDuration);
 
   bluetoothScanner.initBluetooth();
@@ -42,9 +49,12 @@ void setup() {
       lastUploadDuration = uploadDuration;
       DEBUG_LOG("-- LOG: Upload completed in ");
       DEBUG_LOG(uploadDuration);
-      DEBUG_LOGN(" ms");
+      DEBUG_LOG(" ms. Stored for next cycle: ");
+      DEBUG_LOGN(lastUploadDuration);
       
       SPIFFS.format();
+    } else {
+      DEBUG_LOGN("-- ERROR: Upload failed, duration not recorded");
     }
   }
 
