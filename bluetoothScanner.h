@@ -8,6 +8,7 @@
 #include <BLEScan.h>
 #include <BLEAdvertisedDevice.h>
 #include <storeData.h>
+#include <map>
 
 class BluetoothScanner {
 private:
@@ -19,6 +20,8 @@ private:
     const unsigned long _unixTime;
     String _deviceId;
     unsigned long _uploadDuration;
+    std::map<String, unsigned long> _firstSeenTime;
+    std::map<String, unsigned long> _lastSeenTime;
 public:
     BluetoothScanner(unsigned long unixTime, unsigned long uploadDuration = 0);
     void initBluetooth();

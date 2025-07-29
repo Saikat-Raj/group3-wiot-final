@@ -51,7 +51,19 @@ bool BluetoothScanner::_isARelevantDevice(BLEAdvertisedDevice device) {
 }
 
 void BluetoothScanner::_addDevice(BLEAdvertisedDevice device) {
-    String data = String(_unixTime) + "," + device.getAddress().toString() + "," + String(device.getRSSI()) + "," + _deviceId + "," + String(_uploadDuration);
+    String deviceAddress = device.getAddress().toString();
+    unsigned long currentTime = _unixTime;
+    
+    // Track first and last seen times for this device
+    if (_firstSeenTime.find(deviceAddress) == _firstSeenTime.end()) {
+        _firstSeenTime[deviceAddress] = currentTime;
+    }
+    _lastSeenTime[deviceAddress] = currentTime;
+    
+    // Calculate contact duration (seconds)
+    unsigned long contactDuration = _lastSeenTime[deviceAddress] - _firstSeenTime[deviceAddress];
+    
+    String data = String(currentTime) + "," + deviceAddress + "," + String(device.getRSSI()) + "," + _deviceId + "," + String(_uploadDuration) + "," + String(contactDuration);
     storeData(FILE_NAME, data);
 }
 
