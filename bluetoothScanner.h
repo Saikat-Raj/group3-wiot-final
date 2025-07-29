@@ -14,7 +14,9 @@ private:
     bool _isARelevantDevice(BLEAdvertisedDevice device);
     void _addDevice(BLEAdvertisedDevice device);
     void _processDevice(BLEAdvertisedDevice device);
+    String _generateRandomDeviceId();
     const unsigned long _unixTime;
+    String _deviceId;
 public:
     BluetoothScanner(unsigned long unixTime);
     void initBluetooth();

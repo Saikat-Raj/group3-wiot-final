@@ -17,8 +17,7 @@
 #define ID_SIZE 8
 #define NTP_SERVER "pool.ntp.org"
 
-// ⚠ CHANGE THIS PER DEVICE
-#define DEVICE_ID "ESP32_B" // or "ESP32_B"
+// Device ID will be generated randomly each cycle
 
 
 // Set to 0 in production 

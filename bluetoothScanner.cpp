@@ -1,14 +1,32 @@
 #include <bluetoothScanner.h>
 
 BluetoothScanner::BluetoothScanner(unsigned long unixTime)
-    : _unixTime(unixTime) {}
+    : _unixTime(unixTime) {
+    _deviceId = _generateRandomDeviceId();
+    DEBUG_LOG("Generated Device ID: ");
+    DEBUG_LOGN(_deviceId);
+}
+
+String BluetoothScanner::_generateRandomDeviceId() {
+    String deviceId = "ESP32_";
+    for (int i = 0; i < ID_SIZE; i++) {
+        deviceId += String(random(0, 10));
+    }
+    return deviceId;
+}
 
 bool BluetoothScanner::_isARelevantDevice(BLEAdvertisedDevice device) {
     String mfgData = device.getManufacturerData();
 
-    if ((mfgData.indexOf("ESP32_A") != -1 && String(DEVICE_ID) == "ESP32_B") ||
-        (mfgData.indexOf("ESP32_B") != -1 && String(DEVICE_ID) == "ESP32_A")) {
-        return true;
+    if (mfgData.length() > 0) {
+        DEBUG_LOG("Checking device with mfg data: ");
+        DEBUG_LOG(mfgData);
+        DEBUG_LOG(" against our ID: ");
+        DEBUG_LOGN(_deviceId);
+        
+        if (mfgData.indexOf("ESP32_") != -1 && mfgData != _deviceId) {
+            return true;
+        }
     }
 
     return false;
@@ -21,19 +39,10 @@ void BluetoothScanner::_addDevice(BLEAdvertisedDevice device) {
 
 void BluetoothScanner::_processDevice(BLEAdvertisedDevice device) {
     if (_isARelevantDevice(device)) {
-        int rssi = device.getRSSI();
-
-        if (rssi < RSSI_THRESHOLD) {
-            DEBUG_LOG("Ignored device due to weak RSSI: ");
-            DEBUG_LOGN(rssi);
-            return;
-        }
-
         DEBUG_LOG("Found a relevant device with address: ");
         DEBUG_LOGN(device.getAddress().toString());
         DEBUG_LOG("RSSI: ");
-        DEBUG_LOGN(rssi);
-
+        DEBUG_LOGN(device.getRSSI());
         _addDevice(device);
     }
 }
@@ -51,21 +60,10 @@ void BluetoothScanner::initBluetooth() {
 
     BLEAdvertising *bleAdvertising = BLEDevice::getAdvertising();
 
-    // Use DEVICE_ID as identifier
-    char randomId[ID_SIZE + 1];
-    const char charset[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-
-    for (int i = 0; i < ID_SIZE; i++) {
-        randomId[i] = charset[esp_random() % (sizeof(charset) - 1)];
-    }
-    randomId[ID_SIZE] = '\0';
-
-    DEBUG_LOG("Generated ID: ");
-    DEBUG_LOGN(randomId);
-
+    // Use generated device ID as identifier
+    String mfgDataString = _deviceId;
     BLEAdvertisementData adData;
-    adData.setManufacturerData(String(randomId));
-    
+    adData.setManufacturerData(mfgDataString);
     bleAdvertising->setAdvertisementData(adData);
     bleAdvertising->addServiceUUID(SERVICE_UUID);
     bleAdvertising->setScanResponse(true);
