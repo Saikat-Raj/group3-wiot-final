@@ -1,4 +1,3 @@
-
 #include <constants.h>
 #include <secrets.h>
 #include <WiFi.h>
@@ -13,6 +12,26 @@
 // Constants for WiFi data sender
 #define RETRY_COUNTER 3
 #define ACK_TIMEOUT 5000 // 5 seconds
+
+// Global variables for contact tracking (must be declared before classes)
+RTC_DATA_ATTR unsigned long bootCount = 0;
+RTC_DATA_ATTR unsigned long lastUploadDuration = 0;
+
+// Persistent contact tracking (limited to 10 devices for memory efficiency)
+#define MAX_TRACKED_DEVICES 10
+RTC_DATA_ATTR char trackedDevices[MAX_TRACKED_DEVICES][18]; // MAC addresses
+RTC_DATA_ATTR unsigned long firstSeenTimes[MAX_TRACKED_DEVICES];
+RTC_DATA_ATTR unsigned long closeContactDurations[MAX_TRACKED_DEVICES]; // Cumulative close contact time
+RTC_DATA_ATTR unsigned long lastCloseContactTimes[MAX_TRACKED_DEVICES]; // Last time device was in close contact
+RTC_DATA_ATTR int trackedDeviceCount = 0;
+
+// Forward declarations for helper functions
+int findTrackedDevice(const char* deviceAddress);
+unsigned long getFirstSeenTime(const char* deviceAddress);
+void addOrUpdateTrackedDevice(const char* deviceAddress, unsigned long currentTime);
+unsigned long getCloseContactDuration(const char* deviceAddress);
+void updateCloseContact(const char* deviceAddress, unsigned long currentTime, int rssi);
+bool isExposureEvent(const char* deviceAddress, unsigned long currentTime);
 
 // WifiDataSender class
 class WifiDataSender {
@@ -372,17 +391,6 @@ public:
         updateDeviceId();
     }
 };
-
-RTC_DATA_ATTR unsigned long bootCount = 0;
-RTC_DATA_ATTR unsigned long lastUploadDuration = 0;
-
-// Persistent contact tracking (limited to 10 devices for memory efficiency)
-#define MAX_TRACKED_DEVICES 10
-RTC_DATA_ATTR char trackedDevices[MAX_TRACKED_DEVICES][18]; // MAC addresses
-RTC_DATA_ATTR unsigned long firstSeenTimes[MAX_TRACKED_DEVICES];
-RTC_DATA_ATTR unsigned long closeContactDurations[MAX_TRACKED_DEVICES]; // Cumulative close contact time
-RTC_DATA_ATTR unsigned long lastCloseContactTimes[MAX_TRACKED_DEVICES]; // Last time device was in close contact
-RTC_DATA_ATTR int trackedDeviceCount = 0;
 
 // Contact tracking helper functions
 int findTrackedDevice(const char* deviceAddress) {
