@@ -1,9 +1,13 @@
+// This code is part of a Node.js UDP server that receives data from ESP32 devices, processes it, and saves it to files.
 const dgram = require('dgram');
 const os = require('os');
 const fs = require('fs');
 const path = require('path');
 
 // Get local IP address (IPv4)
+// This function retrieves the local IPv4 address of the machine
+// It checks all network interfaces and returns the first non-internal IPv4 address found.
+// If no such address is found, it defaults to '127.0.0.1'
 function getLocalIP() {
   const interfaces = os.networkInterfaces();
   for (const name of Object.keys(interfaces)) {
@@ -20,6 +24,9 @@ const LOCAL_IP = getLocalIP();
 const PORT = 3333;
 
 // Create data directory if it doesn't exist
+// This directory will store the received data files from ESP32 devices
+// It checks if the directory exists, and if not, it creates it
+// The directory is named 'received_data' and is located in the same directory as this script
 const DATA_DIR = path.join(__dirname, 'received_data');
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR);
@@ -32,6 +39,7 @@ server.on('error', (err) => {
   server.close();
 });
 
+// This event is triggered when the server receives a message from a client (ESP32 device)
 server.on('message', (msg, rinfo) => {
   console.log(`\n=== Data received from ESP32 device ${rinfo.address}:${rinfo.port} ===`);
   
@@ -60,6 +68,11 @@ server.on('message', (msg, rinfo) => {
   let validEntries = 0;
   let uploadTimestamp = null;
   
+  // Iterate through each line of the received data
+  // Skip empty lines and handle comments or headers appropriately
+  // Extract timestamp, peerId, rssi, deviceId, and uploadDuration if available
+  // Validate the timestamp and print the parsed data in a readable format
+  // Count valid entries and handle upload timestamp comments
   lines.forEach((line, index) => {
     const trimmedLine = line.trim();
     
@@ -114,6 +127,10 @@ server.on('message', (msg, rinfo) => {
   console.log('===============================================\n');
   
   // Only save to file if we have actual data
+  // This prevents creating empty files or files with just headers
+  // It checks if there are valid entries before proceeding to save
+  // Each device will have its own file named based on its IP address
+  // The file will contain the parsed data in CSV format
   if (validEntries > 0) {
     // Save data to file (creates one file per device)
     const deviceFileName = `device_${rinfo.address.replace(/\./g, '_')}_data.csv`;
@@ -147,6 +164,7 @@ server.on('message', (msg, rinfo) => {
   server.send('ACK', rinfo.port, rinfo.address);
 });
 
+// This event is triggered when the server starts listening for incoming messages
 server.on('listening', () => {
   const address = server.address();
   console.log(`UDP server listening on ${address.address}:${address.port}`);
