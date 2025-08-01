@@ -1,3 +1,5 @@
+// ESP32 Contact Tracing System
+// Scans for nearby Bluetooth devices and tracks contact exposure
 #include <constants.h>
 #include <secrets.h>
 #include <WiFi.h>
@@ -9,23 +11,23 @@
 #include <BLEScan.h>
 #include <BLEAdvertisedDevice.h>
 
-// Constants for WiFi data sender
+// WiFi upload settings
 #define RETRY_COUNTER 3
 #define ACK_TIMEOUT 5000 // 5 seconds
 
-// Global variables for contact tracking (must be declared before classes)
+// Keep track of boot cycles and performance stats
 RTC_DATA_ATTR unsigned long bootCount = 0;
 RTC_DATA_ATTR unsigned long lastUploadDuration = 0;
 
-// Persistent contact tracking (limited to 10 devices for memory efficiency)
+// Memory to remember devices between sleep cycles
 #define MAX_TRACKED_DEVICES 10
 RTC_DATA_ATTR char trackedDevices[MAX_TRACKED_DEVICES][18]; // MAC addresses
 RTC_DATA_ATTR unsigned long firstSeenTimes[MAX_TRACKED_DEVICES];
-RTC_DATA_ATTR unsigned long closeContactDurations[MAX_TRACKED_DEVICES]; // Cumulative close contact time
-RTC_DATA_ATTR unsigned long lastCloseContactTimes[MAX_TRACKED_DEVICES]; // Last time device was in close contact
+RTC_DATA_ATTR unsigned long closeContactDurations[MAX_TRACKED_DEVICES]; // How long we were close
+RTC_DATA_ATTR unsigned long lastCloseContactTimes[MAX_TRACKED_DEVICES]; // When we last saw them close
 RTC_DATA_ATTR int trackedDeviceCount = 0;
 
-// Forward declarations for helper functions
+// Helper functions for device tracking
 int findTrackedDevice(const char* deviceAddress);
 unsigned long getFirstSeenTime(const char* deviceAddress);
 void addOrUpdateTrackedDevice(const char* deviceAddress, unsigned long currentTime);
@@ -33,7 +35,7 @@ unsigned long getCloseContactDuration(const char* deviceAddress);
 void updateCloseContact(const char* deviceAddress, unsigned long currentTime, int rssi);
 bool isExposureEvent(const char* deviceAddress, unsigned long currentTime);
 
-// WifiDataSender class
+// Handles WiFi connection and data uploads
 class WifiDataSender {
 private:
     const char* _ssid;
@@ -50,7 +52,7 @@ private:
         DEBUG_LOGN("-- LOG: Connecting to WiFi...");
         WiFi.begin(_ssid, _password);
 
-        unsigned long timeout = millis() + 10000; // 10 second timeout
+        unsigned long timeout = millis() + 10000; // Give it 10 seconds max to connect
 
         while (WiFi.status() != WL_CONNECTED && millis() < timeout) {
             delay(100);
@@ -69,6 +71,7 @@ private:
         _udp.begin(_udpPort);
     }
 
+    // Wait for server to confirm it got our data
     bool waitForAcknowledgment() {
         unsigned long timeout = millis() + ACK_TIMEOUT;
         
@@ -89,9 +92,10 @@ private:
         return false;
     }
 
+    // Try sending data multiple times if needed
     bool _sendDataWithConfirmation(const char* data) {
         for (_retryCounter = 1; _retryCounter <= RETRY_COUNTER; _retryCounter++) {
-            // Send UDP packet
+            // Send the UDP packet to server
             _udp.beginPacket(_udpAddress, _udpPort);
             _udp.print(data);
             _udp.endPacket();
@@ -101,7 +105,7 @@ private:
                 DEBUG_LOGN(_retryCounter);
             }
 
-            // Wait for acknowledgment
+            // Did server get it?
             if (waitForAcknowledgment()) {
                 DEBUG_LOGN("-- SUCCESS: ACK Received!!");
                 return true;
@@ -119,11 +123,13 @@ public:
         : _ssid(ssid), _password(password), _udpAddress(udpAddress), _udpPort(udpPort),
           _packetAcknowledged(false), _debug(debug), _retryCounter(0) {}
 
+    // Get current timestamp from internet
     unsigned long getUnixTime() {
         if (WiFi.status() != WL_CONNECTED) {
             _connectToWiFi();
         }
 
+        // Sync with time server
         configTime(0, 0, TIME_SERVER);
 
         struct tm timeinfo;
@@ -145,7 +151,7 @@ public:
     }
 };
 
-// Data storage functions
+// Save contact data to local storage
 void storeData(const char* fileName, const String data) {
     DEBUG_LOGF("-- LOG: Writing file: %s\r\n", fileName);
     File file = SPIFFS.open(fileName, FILE_APPEND);
@@ -154,6 +160,7 @@ void storeData(const char* fileName, const String data) {
         return;
     }
 
+    // Create CSV header if this is a new file
     if (file && file.size() == 0) {
         DEBUG_LOGN("-- LOG: Created the Data File!!");
         file.println("timeStamp,peerId,rssi,deviceId,uploadDuration,contactDuration,closeContactDuration,exposureStatus");
@@ -166,6 +173,7 @@ void storeData(const char* fileName, const String data) {
     file.close();
 }
 
+// Read all stored contact data
 String readData(const char* fileName) {
     if (!SPIFFS.exists(fileName)) {
         DEBUG_LOGN("-- ERROR: File doesn't exist!");
@@ -189,7 +197,7 @@ String readData(const char* fileName) {
     return content;
 }
 
-// Utility functions
+// Check if file system is working properly
 void checkSPIFFS() {
     DEBUG_LOGN("\n--- SPIFFS Diagnostics ---");
  
@@ -234,13 +242,14 @@ void checkSPIFFS() {
     DEBUG_LOGN("--- End Diagnostics ---\n");
 }
 
-// BluetoothScanner class
+// Scans for other contact tracing devices nearby
 class BluetoothScanner {
 private:
     const unsigned long startTime;
     String deviceId;
     unsigned long lastUploadDuration;
 
+    // Create a unique ID for this device
     String generateDeviceId() {
         String id = "ESP32_";
         for (int i = 0; i < DEVICE_ID_LENGTH; i++) {
@@ -249,6 +258,7 @@ private:
         return id;
     }
 
+    // Change our broadcast ID periodically for privacy
     void updateDeviceId() {
         deviceId = generateDeviceId();
         DEBUG_LOG("Updated Device ID: ");
@@ -264,6 +274,7 @@ private:
         advertising->start();
     }
 
+    // Check if this is another contact tracing device
     bool isContactTracingDevice(BLEAdvertisedDevice device) {
         String manufacturerData = device.getManufacturerData();
 
@@ -276,12 +287,14 @@ private:
         return false;
     }
 
+    // Record when we see another device and track exposure risk
     void recordDeviceContact(BLEAdvertisedDevice device) {
         String deviceAddress = device.getAddress().toString();
         int rssi = device.getRSSI();
         
         unsigned long currentTime = startTime + (millis() / 1000);
         
+        // Track first contact time
         unsigned long firstSeen = getFirstSeenTime(deviceAddress.c_str());
         if (firstSeen == 0) {
             addOrUpdateTrackedDevice(deviceAddress.c_str(), currentTime);
@@ -292,16 +305,19 @@ private:
             DEBUG_LOGN(currentTime);
         }
         
+        // Update close contact tracking
         updateCloseContact(deviceAddress.c_str(), currentTime, rssi);
         
         unsigned long contactDuration = currentTime - firstSeen;
         unsigned long closeContactDuration = getCloseContactDuration(deviceAddress.c_str());
         
+        // Add ongoing close contact time if still in range
         int index = findTrackedDevice(deviceAddress.c_str());
         if (index >= 0 && lastCloseContactTimes[index] > 0) {
             closeContactDuration += (currentTime - lastCloseContactTimes[index]);
         }
         
+        // Check if this counts as an exposure event
         bool isExposure = isExposureEvent(deviceAddress.c_str(), currentTime);
         String exposureStatus = isExposure ? "EXPOSURE" : "NORMAL";
         
@@ -316,6 +332,7 @@ private:
         DEBUG_LOG("s Status: ");
         DEBUG_LOGN(exposureStatus);
         
+        // Alert if potential exposure detected
         if (isExposure) {
             DEBUG_LOG("*** EXPOSURE EVENT DETECTED with ");
             DEBUG_LOG(deviceAddress);
@@ -324,10 +341,12 @@ private:
             DEBUG_LOGN(" seconds close contact) ***");
         }
         
+        // Save this contact event
         String data = String(currentTime) + "," + deviceAddress + "," + String(rssi) + "," + deviceId + "," + String(lastUploadDuration) + "," + String(contactDuration) + "," + String(closeContactDuration) + "," + exposureStatus;
         storeData(DATA_FILE, data);
     }
 
+    // Process each device we found in the scan
     void processScannedDevice(BLEAdvertisedDevice device) {
         if (isContactTracingDevice(device) && device.getRSSI() >= MIN_RSSI) {
             DEBUG_LOG("Found contact tracing device: ");
@@ -347,6 +366,7 @@ public:
         DEBUG_LOGN(deviceId);
     }
 
+    // Set up Bluetooth advertising and services
     void initBluetooth() {
         BLEDevice::init(BLE_DEVICE_NAME);
         BLEServer *bleServer = BLEDevice::createServer();
@@ -370,6 +390,7 @@ public:
         advertising->start();
     }
 
+    // Do a Bluetooth scan and process any devices we find
     void performScan() {
         BLEScan *scanner = BLEDevice::getScan();
         scanner->setActiveScan(true);
@@ -382,17 +403,20 @@ public:
         DEBUG_LOGN(deviceCount);
         DEBUG_LOGN("Scan Complete!");
 
+        // Check each device we found
         for (int i = 0; i < deviceCount; i++) {
             BLEAdvertisedDevice device = results->getDevice(i);
             processScannedDevice(device);
         }
 
         scanner->clearResults();
-        updateDeviceId();
+        updateDeviceId(); // Change our ID for next scan
     }
 };
 
-// Contact tracking helper functions
+// Helper functions for tracking devices between sleep cycles
+
+// Find a device in our tracking list
 int findTrackedDevice(const char* deviceAddress) {
   for (int i = 0; i < trackedDeviceCount; i++) {
     if (strcmp(trackedDevices[i], deviceAddress) == 0) {
@@ -402,14 +426,16 @@ int findTrackedDevice(const char* deviceAddress) {
   return -1;
 }
 
+// When did we first see this device?
 unsigned long getFirstSeenTime(const char* deviceAddress) {
   int index = findTrackedDevice(deviceAddress);
   return (index >= 0) ? firstSeenTimes[index] : 0;
 }
 
+// Add a new device to our tracking list
 void addOrUpdateTrackedDevice(const char* deviceAddress, unsigned long currentTime) {
   if (findTrackedDevice(deviceAddress) >= 0) {
-    return; // Already tracking this device
+    return; // Already tracking this one
   }
   
   if (trackedDeviceCount < MAX_TRACKED_DEVICES) {
@@ -424,23 +450,26 @@ void addOrUpdateTrackedDevice(const char* deviceAddress, unsigned long currentTi
   }
 }
 
+// How long have we been in close contact with this device?
 unsigned long getCloseContactDuration(const char* deviceAddress) {
   int index = findTrackedDevice(deviceAddress);
   return (index >= 0) ? closeContactDurations[index] : 0;
 }
 
+// Update close contact tracking based on signal strength
 void updateCloseContact(const char* deviceAddress, unsigned long currentTime, int rssi) {
   int index = findTrackedDevice(deviceAddress);
   if (index < 0) return;
   
+  // Strong signal = close contact (within ~1.5m)
   bool isCloseContact = (rssi >= CLOSE_CONTACT_RSSI);
   bool wasInCloseContact = (lastCloseContactTimes[index] > 0);
   
   if (isCloseContact && !wasInCloseContact) {
-    // Starting new close contact period
+    // Just got close - start timing
     lastCloseContactTimes[index] = currentTime;
   } else if (!isCloseContact && wasInCloseContact) {
-    // Ending close contact period
+    // Moved away - add to total close contact time
     unsigned long contactDuration = currentTime - lastCloseContactTimes[index];
     closeContactDurations[index] += contactDuration;
     lastCloseContactTimes[index] = 0;
@@ -452,36 +481,39 @@ void updateCloseContact(const char* deviceAddress, unsigned long currentTime, in
   }
 }
 
+// Check if this counts as a potential exposure event
 bool isExposureEvent(const char* deviceAddress, unsigned long currentTime) {
   int index = findTrackedDevice(deviceAddress);
   if (index < 0) return false;
   
   unsigned long totalCloseContactTime = closeContactDurations[index];
   
-  // Include ongoing close contact time
+  // Include current close contact session if ongoing
   if (lastCloseContactTimes[index] > 0) {
     totalCloseContactTime += (currentTime - lastCloseContactTimes[index]);
   }
   
+  // Exposure = 5+ minutes of close contact
   return totalCloseContactTime >= EXPOSURE_TIME_THRESHOLD;
 }
 
+// Main program starts here
 void setup() {
   Serial.begin(115200);
   delay(100);
 
-  initializeStorage();
+  initializeStorage(); // Set up file system
   
   WifiDataSender wifiSender = WifiDataSender(SSID, PASSWORD, UDP_ADDRESS, UDP_PORT, true);
-  unsigned long currentTime = wifiSender.getUnixTime();
+  unsigned long currentTime = wifiSender.getUnixTime(); // Get current timestamp
   
-  logBootInfo();
+  logBootInfo(); // Show boot stats
   
-  performBluetoothScan(currentTime);
+  performBluetoothScan(currentTime); // Scan for nearby devices
   
-  uploadDataIfNeeded(wifiSender, currentTime);
+  uploadDataIfNeeded(wifiSender, currentTime); // Send data to server if it's time
 
-  enterDeepSleep();
+  enterDeepSleep(); // Sleep to save battery
 }
 
 void initializeStorage() {
@@ -489,6 +521,7 @@ void initializeStorage() {
     DEBUG_LOGN("-- ERROR: SPIFFS Mount Failed!");
   }
 
+  // Fresh start on first boot
   if (bootCount == 0) {
     SPIFFS.format();
     checkSPIFFS();
@@ -509,11 +542,13 @@ void performBluetoothScan(unsigned long currentTime) {
   scanner.performScan();
 }
 
+// Upload data every 5th boot cycle to save battery
 void uploadDataIfNeeded(WifiDataSender& wifiSender, unsigned long currentTime) {
   if (bootCount > 0 && bootCount % 5 == 0) {
     String data = readData(DATA_FILE);
     unsigned long uploadStart = millis();
     
+    // Add timestamp info to upload
     String uploadInfo = "# Upload Timestamp: " + String(currentTime) + "\n";
     String dataWithMetadata = uploadInfo + data;
     
@@ -523,7 +558,7 @@ void uploadDataIfNeeded(WifiDataSender& wifiSender, unsigned long currentTime) {
       DEBUG_LOG(lastUploadDuration);
       DEBUG_LOGN(" ms");
       
-      SPIFFS.format();
+      SPIFFS.format(); // Clear data after successful upload
     } else {
       DEBUG_LOGN("-- ERROR: Upload failed");
     }
@@ -538,4 +573,5 @@ void enterDeepSleep() {
   esp_deep_sleep_start();
 }
 
+// Main loop does nothing - all work happens in setup()
 void loop() {}

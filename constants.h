@@ -16,14 +16,14 @@
 #define EXPOSURE_TIME_THRESHOLD 300  // 5 minutes
 
 // Bluetooth configuration
-#define BLE_DEVICE_NAME "ESP32_ContactTracer"
-#define SERVICE_UUID "12345678-1234-5678-1234-56789abcdef0"
-#define CHARACTERISTIC_UUID "abcdefab-1234-5678-1234-abcdefabcdef"
-#define CHARACTERISTIC_VALUE "Hello"
+#define BLE_DEVICE_NAME "ESP32_ContactTracer" // Name of the BLE device
+#define SERVICE_UUID "12345678-1234-5678-1234-56789abcdef0" // UUID for the BLE service
+#define CHARACTERISTIC_UUID "abcdefab-1234-5678-1234-abcdefabcdef" // UUID for the BLE characteristic
+#define CHARACTERISTIC_VALUE "Hello" // Default value for the BLE characteristic  
 
 // Device identification
-#define DEVICE_ID_LENGTH 8
-#define TIME_SERVER "pool.ntp.org"
+#define DEVICE_ID_LENGTH 8 // Length of the device ID to create random id
+#define TIME_SERVER "pool.ntp.org" // NTP server for time synchronization
 
 // Set to 0 in production 
 #define DEBUG_MODE 1
